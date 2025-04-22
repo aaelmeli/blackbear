@@ -4,26 +4,34 @@
 
 [GlobalParams]
   displacements = 'disp_x disp_y'
+  # volumetric_locking_correction = true
 []
 
-[Physics/SolidMechanics/QuasiStatic]
+[Modules/TensorMechanics/Master]
   [./Concrete_block]
     block = 1
+    # strain = small
     strain = finite
     incremental = true
+   # add_variables = true
     generate_output = 'stress_xx stress_xy stress_yy strain_xx strain_xy strain_yy
-                       vonmises_stress elastic_strain_xx elastic_strain_xy elastic_strain_yy'
+    		       max_principal_stress mid_principal_stress min_principal_stress
+    		       secondinv_stress thirdinv_stress vonmises_stress
+    		       secondinv_strain thirdinv_strain
+    		       elastic_strain_xx elastic_strain_xy elastic_strain_yy'
+#    		       plastic_strain_xx plastic_strain_xy plas tic_strain_xz plastic_strain_yy plastic_strain_yz plastic_strain_zz'
     save_in = 'resid_x resid_y'
   [../]
 []
 
-[Physics/SolidMechanics/LineElement/QuasiStatic] #this is deprecated and need to be updated
+[Physics/SolidMechanics/LineElement/QuasiStatic]
   [./Reinforcement_block]
     block = '2'
     truss = true
     area = area
     displacements = 'disp_x disp_y'
     save_in = 'resid_x resid_y'
+   # add_variables = true
   [../]
 []
 
@@ -43,7 +51,7 @@
     order = CONSTANT
     family = MONOMIAL
   [../]
-  [./axial_stress]
+  [./axial_stress_1]
     order = CONSTANT
     family = MONOMIAL
   [../]
@@ -54,13 +62,13 @@
     type = ConstantAux
     block = '2'
     variable = area
-    value = 2.00e-4 # 509 mm2
+    value = 2.00e-4
     execute_on = 'initial timestep_begin'
   [../]
-  [./axial_stress]
+  [./axial_stress_1]
     type = MaterialRealAux
     block = '2'
-    variable = axial_stress
+    variable = axial_stress_1
     property = axial_stress
   [../]
 []
@@ -70,38 +78,46 @@
     type = RebarBondSlipConstraint
     secondary = 2
     primary = 1
-    penalty = 1e12
+    penalty = 1e6
     variable = 'disp_x'
     primary_variable = 'disp_x'
     component = 0
-    max_bondstress = 100
-    transitional_slip_values = 0.001
-    ultimate_slip = 0.1
+    max_bondstress = 1e5
+    transitional_slip_values = 0.00005
+    ultimate_slip = 0.5
     rebar_radius = 7.98e-3
+    frictional_bondstress = 100
   []
   [rebar_y]
     type = RebarBondSlipConstraint
     secondary = 2
     primary = 1
-    penalty = 1e12
+    penalty = 1e6
     variable = 'disp_y'
     primary_variable = 'disp_y'
     component = 1
-    max_bondstress = 100
-    transitional_slip_values = 0.001
-    ultimate_slip = 0.1
+    max_bondstress = 1e5
+    transitional_slip_values = 0.00005
+    ultimate_slip = 0.5
     rebar_radius = 7.98e-3
+    frictional_bondstress = 100
   []
 []
 
-#2-try to impose DirichletBC on the outside of the concrete block.
+[Functions]
+  [./loading]
+    type = PiecewiseLinear
+    x = '0 10       20     30 '
+    y = '0 0.0001 -0.0001 0.0'
+  [../]
+[]
+
 [BCs]
   [./loading]
     type = FunctionDirichletBC
     variable = disp_x
     boundary = '102'
-    
-    function = 0.01*t
+    function = loading
     preset = true
   [../]
   [./left_support_x]
@@ -152,6 +168,7 @@
   [./node1_fx]
     type = NodalVariableValue
     variable = resid_x
+    # boundary = '1001'
     nodeid = 138
   [../]
   [./node1_fy]
@@ -174,7 +191,6 @@
     variable = resid_x
     boundary = '102'
   [../]
-
   [./stress_xx]
     type = ElementAverageValue
     variable = stress_xx
@@ -187,7 +203,7 @@
   [../]
   [./axial_stress]
     type = ElementAverageValue
-    variable = axial_stress
+    variable = axial_stress_1
     block = '2'
   [../]
 []
@@ -215,8 +231,15 @@
     type = LinearElasticTruss
     block = '2'
     youngs_modulus = 2e11
-    #why the displacements param is not specified (it is shown in the code as a required param)
   []
+  # [./truss]
+  #   type = PlasticTruss
+  #   youngs_modulus = 2.0e11
+  #   yield_stress = 500e5
+  #   hardening_constant = 0
+  #   block = '2'
+  #   outputs = exodus
+  # [../]
 []
 
 [Preconditioning]
@@ -229,20 +252,28 @@
 [Executioner]
   type = Transient
   solve_type = 'PJFNK'
+  nl_max_its = 20
+  nl_abs_tol = 1e-6
+  nl_rel_tol = 1e-05
+  l_tol = 1e-03
+
   line_search = none
+
   petsc_options_iname = '-pc_type'
   petsc_options_value = 'lu'
-  # petsc_options = '-snes_converged_reason'
-  nl_max_its = 10
-  nl_abs_tol = 1e-8
-  nl_rel_tol = 1e-8
-  dtmin = 1e-6
-  num_steps = 1000
+
+  petsc_options = '-snes_converged_reason'
+
+  end_time = 30
+  dtmin = 0.00001
+
   dt = 0.1
 []
 
 
 [Outputs]
+  # print_linear_residuals = false
   exodus = true
   csv = true
+  # file_base = RCBeam_bondslip_test
 []
